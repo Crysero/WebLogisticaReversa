@@ -3,6 +3,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from db_config import conectar
 import uuid
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -14,6 +15,7 @@ carrinhos = {}
 @app.route('/')
 def home():
     return '🚀 Backend Logística está rodando!'
+
 @app.route('/tudo', methods=['GET'])
 def exibir_tudo():
     conexao = conectar()
@@ -42,10 +44,20 @@ def exibir_tudo():
 
     return jsonify({
         "movimentacoes": movimentacoes,
-        "carrinhos": carrinhos,       # memória do backend
+        "carrinhos": carrinhos,
         "materiais": materiais,
         "fornecedores": fornecedores
     })
+
+@app.route('/material', methods=['GET'])
+def listar_materiais():
+    conexao = conectar()
+    cursor = conexao.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM materiais")
+    materiais = cursor.fetchall()
+    cursor.close()
+    conexao.close()
+    return jsonify(materiais)
 
 @app.route('/movimentacoes', methods=['GET'])
 def consultar_movimentacoes():
@@ -163,7 +175,6 @@ def atualizar_fornecedor():
 def get_carrinho(chave):
     return jsonify(carrinhos.get(chave, []))
 
-# ✅ CORRIGIDO: campos compatíveis com o front-end
 @socketio.on('adicionar_produto')
 def adicionar_produto(data):
     id = data['id']
@@ -219,9 +230,6 @@ def buscar_produto():
         return jsonify(produto)
     else:
         return jsonify({'erro': 'Produto não encontrado'}), 404
-import os
 
-# No final do arquivo:
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
