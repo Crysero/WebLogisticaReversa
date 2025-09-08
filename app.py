@@ -24,7 +24,7 @@ def exibir_tudo():
     # 🔹 Movimentações
     cursor.execute("""
         SELECT m.*, mat.cod_material AS material, mat.ean, mat.texto_breve_material,
-               f.nome AS descricao_fornecedor_principal
+               f.descricao_fornecedor_principal AS descricao_fornecedor_principal
         FROM movimentacoes m
         LEFT JOIN materiais mat ON m.cod_material = mat.id
         LEFT JOIN fornecedores f ON m.cod_fornecedor = f.id
@@ -66,17 +66,17 @@ def consultar_movimentacoes():
     material = request.args.get('material')
 
     query = """
-        SELECT m.*, mat.cod_material AS material, mat.ean, mat.texto_breve_material,
-               f.nome AS descricao_fornecedor_principal
-        FROM movimentacoes m
-        LEFT JOIN materiais mat ON m.cod_material = mat.id
-        LEFT JOIN fornecedores f ON m.cod_fornecedor = f.id
-        WHERE 1=1
+        SELECT mat.cod_material, mat.texto_breve_material, mat.ean,
+           f.descricao_fornecedor_principal AS descricao_fornecedor_principal
+    FROM materiais mat
+    LEFT JOIN movimentacoes mov ON mov.cod_material = mat.id
+    LEFT JOIN fornecedores f ON f.id = mov.cod_fornecedor
+    WHERE 1=1
     """
     params = []
 
     if id:
-        query += " AND m.id = %s"
+        query += " AND mov.id = %s"
         params.append(id)
     if ean:
         query += " AND mat.ean = %s"
@@ -84,6 +84,8 @@ def consultar_movimentacoes():
     if material:
         query += " AND mat.cod_material = %s"
         params.append(material)
+
+    query += " LIMIT 100"
 
     conexao = conectar()
     cursor = conexao.cursor(dictionary=True)
@@ -185,7 +187,7 @@ def adicionar_produto(data):
     cursor.execute("""
         SELECT m.quantidade, m.tipo_movimento, m.data_entrada,
                mat.cod_material AS material, mat.texto_breve_material,
-               f.nome AS descricao_fornecedor_principal
+               f.descricao_fornecedor_principal AS descricao_fornecedor_principal
         FROM movimentacoes m
         LEFT JOIN materiais mat ON m.cod_material = mat.id
         LEFT JOIN fornecedores f ON m.cod_fornecedor = f.id
@@ -203,33 +205,48 @@ def adicionar_produto(data):
 
 @app.route('/buscar_produto', methods=['POST'])
 def buscar_produto():
-    data = request.json
-    valor = data.get('valor')
+    try:
+        data = request.json
+        cod_material = data.get('valor')
 
-    if not valor:
-        return jsonify({'erro': 'Material ou EAN são obrigatórios'}), 400
+        if not cod_material:
+            return jsonify({'erro': 'O código do material é obrigatório'}), 400
 
-    query = """
-        SELECT mat.cod_material, mat.texto_breve_material, mat.ean,
-               f.nome AS descricao_fornecedor_principal
+        query = """
+                        SELECT mat.cod_material, mat.texto_breve_material, mat.ean,
+                mov.descricao_fornecedor_principal as descricao
         FROM materiais mat
-        LEFT JOIN movimentacoes m ON m.cod_material = mat.id
-        LEFT JOIN fornecedores f ON m.cod_fornecedor = f.id
-        WHERE mat.cod_material = %s OR mat.ean = %s
+        LEFT JOIN movimentacoes mov ON mov.cod_material = mat.id
+        LEFT JOIN fornecedores f ON f.id = mov.cod_fornecedor
+        WHERE mat.cod_material = %s 
         LIMIT 1
-    """
 
-    conexao = conectar()
-    cursor = conexao.cursor(dictionary=True)
-    cursor.execute(query, (valor, valor))
-    produto = cursor.fetchone()
-    cursor.close()
-    conexao.close()
+        """
 
-    if produto:
-        return jsonify(produto)
-    else:
-        return jsonify({'erro': 'Produto não encontrado'}), 404
+        conexao = conectar()
+        cursor = conexao.cursor(dictionary=True)
+        cursor.execute(query, (cod_material,))
+        produto = cursor.fetchone()
+        cursor.close()
+        conexao.close()
+
+        # 👇 Aqui você vai ver no terminal
+        print("Resultado da query:", produto)
+
+        if produto:
+            return jsonify(produto)
+        else:
+            return jsonify({'erro': 'Produto não encontrado'}), 404
+
+    except Exception as e:
+        print("Erro no buscar_produto:", str(e))  # também mostra no terminal
+        return jsonify({'erro': f'Erro interno: {str(e)}'}), 500
+
+
+
+import os
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5050))
+    app.run(host="0.0.0.0", port=port)
+
